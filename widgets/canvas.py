@@ -331,7 +331,6 @@ class Canvas(QtWidgets.QWidget):
     def mousePressEvent(self, ev):
 
         pos = self.transformPos(ev.localPos())
-        print(pos)
         if ev.button() == QtCore.Qt.LeftButton:
             if self.drawing():
                 if self.current:

@@ -109,22 +109,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self.label_dock.setObjectName(u"Label List")
         self.label_dock.setWidget(self.uniqLabelList)
 
-        # self.fileSearch = QtWidgets.QLineEdit()
-        # self.fileSearch.setPlaceholderText(self.tr("Search Filename"))
-        # self.fileListWidget = QtWidgets.QListWidget()
-        # self.fileListWidget.itemSelectionChanged.connect(
-        #     self.fileSelectionChanged
-        # )
-        # fileListLayout = QtWidgets.QVBoxLayout()
-        # fileListLayout.setContentsMargins(0, 0, 0, 0)
-        # fileListLayout.setSpacing(0)
-        # fileListLayout.addWidget(self.fileSearch)
-        # fileListLayout.addWidget(self.fileListWidget)
-        # self.file_dock = QtWidgets.QDockWidget(self.tr(u"File List"), self)
-        # self.file_dock.setObjectName(u"Files")
-        # fileListWidget = QtWidgets.QWidget()
-        # fileListWidget.setLayout(fileListLayout)
-        # self.file_dock.setWidget(fileListWidget)
+        self.fileSearch = QtWidgets.QLineEdit()
+        self.fileSearch.setPlaceholderText(self.tr("Search Filename"))
+        self.fileListWidget = QtWidgets.QListWidget()
+        self.fileListWidget.itemSelectionChanged.connect(
+            self.fileSelectionChanged
+        )
+        fileListLayout = QtWidgets.QVBoxLayout()
+        fileListLayout.setContentsMargins(0, 0, 0, 0)
+        fileListLayout.setSpacing(0)
+        fileListLayout.addWidget(self.fileSearch)
+        fileListLayout.addWidget(self.fileListWidget)
+        self.file_dock = QtWidgets.QDockWidget(self.tr(u"File List"), self)
+        self.file_dock.setObjectName(u"Files")
+        fileListWidget = QtWidgets.QWidget()
+        fileListWidget.setLayout(fileListLayout)
+        self.file_dock.setWidget(fileListWidget)
 
         self.zoomWidget = ZoomWidget()
         self.setAcceptDrops(True)
@@ -167,7 +167,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # self.addDockWidget(Qt.RightDockWidgetArea, self.flag_dock)
         #self.addDockWidget(Qt.RightDockWidgetArea, self.label_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.shape_dock)
-
+        self.addDockWidget(Qt.RightDockWidgetArea, self.file_dock)
         # self.addDockWidget(Qt.RightDockWidgetArea, self.file_dock)
 
         # Actions
@@ -335,7 +335,22 @@ class MainWindow(QtWidgets.QMainWindow):
             )
         )
         self.zoomWidget.setEnabled(False)
-
+        openNextImg = action(
+            self.tr("&Next Image"),
+            self.openNextImg,
+            shortcuts["open_next"],
+            "next",
+            self.tr(u"Open next (hold Ctl+Shift to copy labels)"),
+            enabled=False,
+        )
+        openPrevImg = action(
+            self.tr("&Prev Image"),
+            self.openPrevImg,
+            shortcuts["open_prev"],
+            "prev",
+            self.tr(u"Open prev (hold Ctl+Shift to copy labels)"),
+            enabled=False,
+        )
         zoomIn = action(
             self.tr("Zoom &In"),
             functools.partial(self.addZoom, 1.1),
@@ -451,6 +466,8 @@ class MainWindow(QtWidgets.QMainWindow):
             fitWidth=fitWidth,
             zoomActions=zoomActions,
             fileMenuActions=(quit,save),
+            openNextImg=openNextImg,
+            openPrevImg=openPrevImg,
             tool=(),
             # XXX: need to add some actions here to activate the shortcut
             editMenu=(
@@ -553,8 +570,10 @@ class MainWindow(QtWidgets.QMainWindow):
         # Populate the File menu dynamically.
         # Since loading the file may take some time,
         # make sure it runs in the background.
-        if self.filename is not None:
-            self.queueEvent(functools.partial(self.loadFile, self.filename))
+        if filename is not None and osp.isdir(filename):
+            self.importDirImages(filename, load=False)
+        else:
+            self.filename = filename
 
         # Callbacks:
         self.zoomWidget.valueChanged.connect(self.paintCanvas)
@@ -625,6 +644,21 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # Callbacks
 
+    def fileSelectionChanged(self):
+        self.labelList.clear()
+        items = self.fileListWidget.selectedItems()
+        if not items:
+            return
+        item = items[0]
+
+        # if not self.mayContinue():
+        #     return
+
+        currIndex = self.imageList.index(str(item.text()))
+        if currIndex < len(self.imageList):
+            filename = self.imageList[currIndex]
+            if filename:
+                self.loadFile(filename)
     def undoShapeEdit(self):
         self.canvas.restoreShape()
         self.labelList.clear()
@@ -1102,17 +1136,23 @@ class MainWindow(QtWidgets.QMainWindow):
     #     self.status(self.tr("Loaded %s") % osp.basename(str(filename)))
     #     return True
 
+    @property
+    def imageList(self):
+        lst = []
+        for i in range(self.fileListWidget.count()):
+            item = self.fileListWidget.item(i)
+            lst.append(item.text())
+        return lst
+
     def loadFile(self, filename=None):
         """Load the specified file, or the last opened file if None."""
         # changing fileListWidget loads file
-        # if filename in self.imageList and (
-        #     self.fileListWidget.currentRow() != self.imageList.index(filename)
-        # ):
-        #     self.fileListWidget.setCurrentRow(self.imageList.index(filename))
-        #     self.fileListWidget.repaint()
-        #     return
-
-
+        if filename in self.imageList and (
+            self.fileListWidget.currentRow() != self.imageList.index(filename)
+        ):
+            self.fileListWidget.setCurrentRow(self.imageList.index(filename))
+            self.fileListWidget.repaint()
+            return
         self.canvas.setEnabled(False)
         if filename is None:
             filename = self.settings.value("filename", "")
@@ -1297,8 +1337,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def reload(self, filename):
         self.remLabels(self.canvas.shapes)
-        filename = str("/Users/yuxinsong/PycharmProjects/pythonProject9/apc2016_obj3.jpg")
         self.setClean()
+        filename = self.filename
         label_file = osp.splitext(filename)[0] + ".json"
         if QtCore.QFile.exists(label_file) and LabelFile.is_label_file(
                 label_file
@@ -1320,3 +1360,102 @@ class MainWindow(QtWidgets.QMainWindow):
             self.loadLabels(self.labelFile.shapes)
         return True
 
+
+    def importDirImages(self, dirpath, pattern=None, load=True):
+        self.actions.openNextImg.setEnabled(True)
+        self.actions.openPrevImg.setEnabled(True)
+
+        # if not self.mayContinue() or not dirpath:
+        #     return
+
+        self.lastOpenDir = dirpath
+        self.filename = None
+        self.fileListWidget.clear()
+        for filename in self.scanAllImages(dirpath):
+            if pattern and pattern not in filename:
+                continue
+            label_file = osp.splitext(filename)[0] + ".json"
+            if self.output_dir:
+                label_file_without_path = osp.basename(label_file)
+                label_file = osp.join(self.output_dir, label_file_without_path)
+            filenameShowed = filename.split("/")[-2]+"/"+filename.split("/")[-1]
+            icon = QtGui.QIcon()
+            icon.addFile(filename)
+            item = QtWidgets.QListWidgetItem(filenameShowed)
+            item.setIcon(icon)
+
+            self.fileListWidget.addItem(item)
+            size = QtCore.QSize()
+            size.setHeight(100)
+            size.setWidth(100)
+            self.fileListWidget.setIconSize(size)
+
+        self.openNextImg(load=load)
+
+    def scanAllImages(self, folderPath):
+        extensions = [
+            ".%s" % fmt.data().decode().lower()
+            for fmt in QtGui.QImageReader.supportedImageFormats()
+        ]
+
+        images = []
+        for root, dirs, files in os.walk(folderPath):
+            for file in files:
+                if file.lower().endswith(tuple(extensions)):
+                    relativePath = osp.join(root, file)
+                    images.append(relativePath)
+        images.sort(key=lambda x: x.lower())
+        return images
+
+    def openPrevImg(self, _value=False):
+        keep_prev = self._config["keep_prev"]
+        if QtWidgets.QApplication.keyboardModifiers() == (
+            Qt.ControlModifier | Qt.ShiftModifier
+        ):
+            self._config["keep_prev"] = True
+
+        # if not self.mayContinue():
+        #     return
+
+        if len(self.imageList) <= 0:
+            return
+
+        if self.filename is None:
+            return
+
+        currIndex = self.imageList.index(self.filename)
+        if currIndex - 1 >= 0:
+            filename = self.imageList[currIndex - 1]
+            if filename:
+                self.loadFile(filename)
+
+        self._config["keep_prev"] = keep_prev
+
+    def openNextImg(self, _value=False, load=True):
+        keep_prev = self._config["keep_prev"]
+        if QtWidgets.QApplication.keyboardModifiers() == (
+            Qt.ControlModifier | Qt.ShiftModifier
+        ):
+            self._config["keep_prev"] = True
+
+        # if not self.mayContinue():
+        #     return
+
+        if len(self.imageList) <= 0:
+            return
+
+        filename = None
+        if self.filename is None:
+            filename = self.imageList[0]
+        else:
+            currIndex = self.imageList.index(self.filename)
+            if currIndex + 1 < len(self.imageList):
+                filename = self.imageList[currIndex + 1]
+            else:
+                filename = self.imageList[-1]
+        self.filename = filename
+
+        if self.filename and load:
+            self.loadFile(self.filename)
+
+        self._config["keep_prev"] = keep_prev
