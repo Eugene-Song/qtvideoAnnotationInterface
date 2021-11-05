@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import functools
+import json
 import math
 import os
 import os.path as osp
@@ -196,7 +197,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self.tr("Save labels to file"),
             enabled=True,
         )
-
+        done = action(
+            self.tr("Done"),
+            self.done,
+            shortcuts["delete_polygon"],
+            "file",
+            self.tr("Update flags to file"),
+            enabled=True,
+        )
         toggle_keep_prev_mode = action(
             self.tr("Keep Previous Annotation"),
             self.toggleKeepPrevMode,
@@ -444,6 +452,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actions = utils.struct(
             reload=reload,
             save=save,
+            done=done,
             toggleKeepPrevMode=toggle_keep_prev_mode,
             delete=delete,
             edit=edit,
@@ -515,6 +524,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actions.tool = (
             reload,
             save,
+            done,
             None,
             createMode,
             editMode,
@@ -1334,6 +1344,19 @@ class MainWindow(QtWidgets.QMainWindow):
         elif len(self.recentFiles) >= self.maxRecent:
             self.recentFiles.pop()
         self.recentFiles.insert(0, filename)
+    def done(self, filename):
+        filename = self.filename
+        label_file = osp.splitext(filename)[0] + ".json"
+        if QtCore.QFile.exists(label_file) and LabelFile.is_label_file(
+                label_file
+        ):
+            a_file = open(label_file,"r")
+            jsonObj = json.load(a_file)
+            a_file.close()
+            jsonObj["flags"]=1
+            a_file = open(label_file,"w")
+            json.dump(jsonObj,a_file,indent=4,separators=(',',': '))
+            a_file.close()
 
     def reload(self, filename):
         self.remLabels(self.canvas.shapes)
